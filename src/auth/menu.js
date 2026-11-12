@@ -40,6 +40,7 @@ export const MENU_SECTIONS = [
   {
     title: 'Account',
     items: [
+      { key: 'my-subscription', label: 'My Subscription', icon: 'ribbon-outline', route: '/my-subscription', ownerOnly: true, subscriptionOnly: true, tint: '#12A150' },
       { key: 'change-password', label: 'Change Password', icon: 'lock-closed-outline', route: '/change-password', flag: 'ChangePassword', tint: '#3B4256' },
       { key: 'admin', label: 'Admin', icon: 'settings-outline', route: '/admin', superAdminOnly: true, tint: '#D98A00' },
     ],
@@ -49,6 +50,7 @@ export const MENU_SECTIONS = [
 export function visibleItems(section, auth) {
   return section.items.filter((it) => {
     if (it.superAdminOnly) return auth.isSuperAdmin;
+    if (it.subscriptionOnly && !auth.subscription) return false;
     if (auth.isStaff && it.ownerOnly) return false;
     return !it.flag || auth.can(it.flag);
   });

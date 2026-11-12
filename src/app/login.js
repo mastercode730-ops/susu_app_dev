@@ -60,48 +60,18 @@ function ResetPasswordSheet({ visible, onClose, staff }) {
   );
 }
 
-function RegisterSheet({ visible, onClose }) {
-  const [mobile, setMobile] = useState('');
-  const [pwd, setPwd] = useState('');
-  const [conf, setConf] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const submit = async () => {
-    setMsg(null);
-    if (!mobile.trim() || !pwd.trim()) return setMsg({ t: 'Mobile aur password required hai' });
-    if (pwd.trim() !== conf.trim()) return setMsg({ t: 'Password match nahi kar raha' });
-    setBusy(true);
-    const r = await api.post('/api/auth/register', { mobile: mobile.trim(), password: pwd.trim() }, { auth: false });
-    setBusy(false);
-    if (r?.success) {
-      setMsg({ t: r.message || 'Account create ho gaya! Ab login karein.', ok: true });
-      setMobile(''); setPwd(''); setConf('');
-    } else setMsg({ t: r?.message || 'Kuch galat ho gaya' });
-  };
-  return (
-    <Sheet
-      visible={visible}
-      onClose={() => { setMsg(null); onClose(); }}
-      title="New User Registration"
-      subtitle="Apna mobile number aur password dalkar naya account banayein"
-      footer={<Button title="Create Account" icon="person-add-outline" loading={busy} onPress={submit} full />}
-    >
-      <Field label="Mobile Number" icon="call-outline" value={mobile} onChangeText={setMobile} keyboardType="number-pad" maxLength={10} placeholder="10 digit mobile number" />
-      <Field label="Password" icon="lock-closed-outline" value={pwd} onChangeText={setPwd} secure placeholder="Choose a password" />
-      <Field label="Confirm Password" icon="lock-closed-outline" value={conf} onChangeText={setConf} secure placeholder="Re-enter password" />
-      <Banner msg={msg?.t} ok={msg?.ok} />
-    </Sheet>
-  );
-}
-
 export default function Login() {
   const insets = useSafeAreaInsets();
-  const { login, staffLogin } = useAuth();
+  const { login, staffLogin, managerLogin } = useAuth();
   const [tab, setTab] = useState('user');
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [staffId, setStaffId] = useState('');
   const [staffPwd, setStaffPwd] = useState('');
+  const [smMobile, setSmMobile] = useState('');
+  const [smPwd, setSmPwd] = useState('');
+  const [expired, setExpired] = useState(false);
+  const smPwdRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sheet, setSheet] = useState(null);
@@ -110,18 +80,23 @@ export default function Login() {
 
   const submit = async () => {
     setError('');
+    setExpired(false);
     const isUser = tab === 'user';
-    const idVal = (isUser ? mobile : staffId).trim();
-    const pwVal = (isUser ? password : staffPwd).trim();
+    const isSm = tab === 'sm';
+    const idVal = (isSm ? smMobile : isUser ? mobile : staffId).trim();
+    const pwVal = isSm ? smPwd : (isUser ? password : staffPwd).trim();
     if (!idVal || !pwVal) {
-      setError(isUser ? 'Mobile and password required' : 'SubUser ID and password required');
+      setError(tab === 'staff' ? 'SubUser ID and password required' : 'Mobile and password required');
       return;
     }
     setBusy(true);
-    const r = isUser ? await login(idVal, pwVal) : await staffLogin(idVal, pwVal);
+    const r = isSm ? await managerLogin(idVal, pwVal) : isUser ? await login(idVal, pwVal) : await staffLogin(idVal, pwVal);
     setBusy(false);
-    if (r.ok) router.replace('/home');
-    else setError(r.message || (isUser ? 'Invalid credentials' : 'Invalid or inactive'));
+    if (r.ok) router.replace(isSm ? '/sm' : '/home');
+    else {
+      setError(r.message || (tab === 'staff' ? 'Invalid or inactive' : 'Invalid credentials'));
+      setExpired(isUser && r.code === 'SUBSCRIPTION_EXPIRED');
+    }
   };
 
   return (
@@ -139,13 +114,18 @@ export default function Login() {
             <Segmented
               value={tab}
               onChange={(k) => { setTab(k); setError(''); }}
-              options={[{ key: 'user', label: 'User Login', icon: 'person-outline' }, { key: 'staff', label: 'Staff Login', icon: 'people-outline' }]}
+              options={[{ key: 'user', label: 'Admin', icon: 'person-outline' }, { key: 'staff', label: 'Staff', icon: 'people-outline' }, { key: 'sm', label: 'Manager', icon: 'shield-checkmark-outline' }]}
               style={{ marginBottom: space.lg }}
             />
             {tab === 'user' ? (
               <>
                 <Field label="Mobile Number" icon="call-outline" value={mobile} onChangeText={setMobile} keyboardType="number-pad" maxLength={10} placeholder="10 digit mobile number" returnKeyType="next" onSubmitEditing={() => pwdRef.current?.focus()} />
                 <Field ref={pwdRef} label="Password" icon="lock-closed-outline" value={password} onChangeText={setPassword} secure placeholder="Enter password" returnKeyType="go" onSubmitEditing={submit} />
+              </>
+            ) : tab === 'sm' ? (
+              <>
+                <Field label="Super Manager Mobile" icon="call-outline" value={smMobile} onChangeText={setSmMobile} keyboardType="number-pad" maxLength={10} placeholder="10 digit mobile number" returnKeyType="next" onSubmitEditing={() => smPwdRef.current?.focus()} />
+                <Field ref={smPwdRef} label="Password" icon="lock-closed-outline" value={smPwd} onChangeText={setSmPwd} secure placeholder="Enter password" returnKeyType="go" onSubmitEditing={submit} />
               </>
             ) : (
               <>
@@ -154,25 +134,33 @@ export default function Login() {
               </>
             )}
             <Banner msg={error} />
-            <Button title={tab === 'user' ? 'Login' : 'Staff Login'} size="lg" iconRight="arrow-forward" loading={busy} onPress={submit} full style={{ marginTop: space.sm }} />
-            <View style={styles.links}>
-              <Pressable hitSlop={8} onPress={() => setSheet(tab === 'user' ? 'cp-user' : 'cp-staff')}>
-                <Text style={styles.link}>Change Password</Text>
-              </Pressable>
-              {tab === 'user' ? (
-                <Pressable hitSlop={8} onPress={() => setSheet('register')}>
-                  <Text style={styles.link}>New User? Register</Text>
+            {expired ? (
+              <Button title="Renew subscription" icon="refresh" variant="outline" onPress={() => router.push({ pathname: '/subscribe', params: { renew: '1', mobile: mobile.trim() } })} full style={{ marginBottom: space.sm }} />
+            ) : null}
+            <Button title={tab === 'user' ? 'Login' : tab === 'sm' ? 'Manager Login' : 'Staff Login'} size="lg" iconRight="arrow-forward" loading={busy} onPress={submit} full style={{ marginTop: space.sm }} />
+            {tab !== 'sm' ? (
+              <View style={styles.links}>
+                <Pressable hitSlop={8} onPress={() => setSheet(tab === 'user' ? 'cp-user' : 'cp-staff')}>
+                  <Text style={styles.link}>Change Password</Text>
                 </Pressable>
-              ) : null}
-            </View>
+              </View>
+            ) : null}
           </View>
+
+          <Pressable onPress={() => router.push('/subscribe')} style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}>
+            <View style={styles.ctaIcon}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ctaTitle}>Get a Subscription</Text>
+              <Text style={styles.ctaSub}>Plan chunein, payment karein aur apna Admin account paayein</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color={colors.brand} />
+          </Pressable>
           <View style={{ flex: 1 }} />
           <Text style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>© Yubi7 · Secure Login</Text>
         </ScrollView>
       </KeyboardAvoidingView>
       <ResetPasswordSheet visible={sheet === 'cp-user'} onClose={() => setSheet(null)} />
       <ResetPasswordSheet visible={sheet === 'cp-staff'} onClose={() => setSheet(null)} staff />
-      <RegisterSheet visible={sheet === 'register'} onClose={() => setSheet(null)} />
     </View>
   );
 }
@@ -190,5 +178,9 @@ const styles = StyleSheet.create({
   bannerErr: { backgroundColor: colors.dangerSoft },
   bannerOk: { backgroundColor: colors.successSoft },
   bannerText: { flex: 1, fontSize: font.sm, fontWeight: weight.semi },
+  cta: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: space.lg, marginTop: space.lg, padding: space.lg, borderRadius: radius.lg, backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.brand + '33' },
+  ctaIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  ctaTitle: { fontSize: font.md, fontWeight: weight.heavy, color: colors.brandText },
+  ctaSub: { fontSize: font.xs, color: colors.muted, marginTop: 2 },
   footer: { textAlign: 'center', color: colors.faint, fontSize: font.xs, marginTop: space.xl },
 });

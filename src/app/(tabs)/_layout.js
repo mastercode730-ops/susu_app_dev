@@ -12,9 +12,10 @@ const icon = (name) => {
 };
 
 export default function TabsLayout() {
-  const { user } = useAuth();
+  const { user, isSuperManager } = useAuth();
   const insets = useSafeAreaInsets();
   if (!user) return <Redirect href="/login" />;
+  if (isSuperManager) return <Redirect href="/sm" />;
   return (
     <Tabs
       screenOptions={{

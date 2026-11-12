@@ -42,6 +42,14 @@
           "resizeMode": "contain",
           "backgroundColor": "#5B4CF5"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Yubi7 to access your photos so you can upload a payment screenshot.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
       ]
     ],
     "extra": {

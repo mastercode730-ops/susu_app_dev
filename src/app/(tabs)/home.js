@@ -17,7 +17,8 @@ const DEFAULT_RATE = { Rate: '0/100-0/10-0', D_PComm: '0', D_Amt: '100', A_PComm
 
 export default function Home() {
   const insets = useSafeAreaInsets();
-  const { displayName, roleLabel, can } = useAuth();
+  const { displayName, roleLabel, can, subscription } = useAuth();
+  const subDays = subscription ? Number(subscription.daysLeft) : null;
   const [games, setGames] = useState(null);
   const [contacts, setContacts] = useState(null);
   const [label, setLabel] = useState('Contacts');
@@ -133,6 +134,16 @@ export default function Home() {
         </View>
       </LinearGradient>
 
+      {subscription && subDays >= 0 && subDays <= 7 ? (
+        <Pressable onPress={() => router.push('/my-subscription')} style={styles.expiry}>
+          <Ionicons name="warning" size={18} color={colors.warning} />
+          <Text style={styles.expiryText}>
+            Subscription {subDays === 0 ? 'aaj' : subDays === 1 ? 'kal' : `${subDays + 1} din mein`} expire ho raha hai. Renew karein.
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.warning} />
+        </Pressable>
+      ) : null}
+
       <View style={styles.sectionHead}>
         <Text style={styles.sectionTitle}>My Games</Text>
         <Pressable onPress={() => router.push('/inbox')} hitSlop={8}><Text style={styles.sectionLink}>Open inbox</Text></Pressable>
@@ -242,6 +253,8 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
+  expiry: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: space.lg, marginTop: space.md, padding: space.md, borderRadius: 14, backgroundColor: colors.warningSoft, borderWidth: 1, borderColor: colors.warning + '55' },
+  expiryText: { flex: 1, color: colors.warning, fontWeight: '700', fontSize: 13 },
   hero: { paddingHorizontal: space.lg, paddingBottom: space.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: space.lg },
   hello: { color: 'rgba(255,255,255,0.75)', fontSize: font.sm, fontWeight: weight.semi },

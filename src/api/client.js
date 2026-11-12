@@ -3,7 +3,9 @@
 // same JWT Bearer auth, so every request behaves exactly as it does on web.
 import * as SecureStore from 'expo-secure-store';
 
-export const API_BASE = 'https://marketai.solutions/sapi';
+// Set EXPO_PUBLIC_API_BASE (e.g. in .env or the EAS environment) to point the
+// app at this deployment's backend; the fallback is the original production API.
+export const API_BASE = (process.env.EXPO_PUBLIC_API_BASE || 'https://marketai.solutions/sapi').replace(/\/+$/, '');
 const TOKEN_KEY = 'yubi7_token';
 const TIMEOUT_MS = 90000;
 
@@ -54,7 +56,9 @@ async function request(method, path, { params, body, auth = true } = {}) {
     if (res.status === 401 && auth) {
       const msg = data?.code === 'SESSION_EXPIRED_OTHER_DEVICE'
         ? 'You were logged out because this account signed in on another device.'
-        : 'Your session has expired. Please log in again.';
+        : (data?.code === 'SUBSCRIPTION_EXPIRED' || data?.code === 'ACCOUNT_BLOCKED') && data?.message
+          ? data.message
+          : 'Your session has expired. Please log in again.';
       if (unauthorizedHandler) unauthorizedHandler(msg);
       return { success: false, message: msg, unauthorized: true };
     }

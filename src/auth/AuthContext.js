@@ -27,8 +27,9 @@ export function AuthProvider({ children }) {
     await persistUser(null);
   }, [persistUser]);
 
-  const refreshMe = useCallback(async () => {
-    const r = await api.get('/api/auth/me');
+  const refreshMe = useCallback(async (asManager) => {
+    // Super Manager tokens are only valid on /api/sm/*.
+    const r = await api.get(asManager ? '/api/sm/me' : '/api/auth/me');
     if (r?.success && r.user) {
       await persistUser(r.user);
       return r.user;
@@ -43,9 +44,10 @@ export function AuthProvider({ children }) {
       if (t) {
         try {
           const cached = await AsyncStorage.getItem(USER_KEY);
-          if (cached) setUser(JSON.parse(cached));
-        } catch {}
-        refreshMe();
+          const parsed = cached ? JSON.parse(cached) : null;
+          if (parsed) setUser(parsed);
+          refreshMe(parsed?.role === 'SuperManager');
+        } catch { refreshMe(); }
       }
       setReady(true);
     })();
@@ -62,13 +64,18 @@ export function AuthProvider({ children }) {
     });
   }, [clearSession]);
 
-  const completeLogin = useCallback(async (r) => {
-    if (!r?.success || !r.token) return { ok: false, message: r?.message || 'Invalid credentials' };
+  const completeLogin = useCallback(async (r, asManager) => {
+    if (!r?.success || !r.token) return { ok: false, message: r?.message || 'Invalid credentials', code: r?.code };
     await setToken(r.token);
     await persistUser(r.user || null);
-    await refreshMe();
+    await refreshMe(asManager);
     return { ok: true };
   }, [persistUser, refreshMe]);
+
+  const managerLogin = useCallback(async (mobile, password) => {
+    const r = await api.post('/api/sm/login', { mobile, password }, { auth: false });
+    return completeLogin(r, true);
+  }, [completeLogin]);
 
   const login = useCallback(async (mobile, password) => {
     const r = await api.post('/api/auth/login', { mobile, password }, { auth: false });
@@ -87,17 +94,19 @@ export function AuthProvider({ children }) {
   }, [clearSession]);
 
   const value = useMemo(() => {
-    const isStaff = !!user?.SubUID;
-    const isSuperAdmin = !isStaff && (user?.SuperAdmin === 'SuperAdmin' || user?.SuperAdminStatus === 'True');
+    const isSuperManager = user?.role === 'SuperManager';
+    const isStaff = !isSuperManager && !!user?.SubUID;
+    const isSuperAdmin = !isSuperManager && !isStaff && (user?.SuperAdmin === 'SuperAdmin' || user?.SuperAdminStatus === 'True');
     return {
-      user, ready, isStaff, isSuperAdmin,
-      login, staffLogin, logout, refreshMe,
+      user, ready, isStaff, isSuperAdmin, isSuperManager,
+      subscription: !isStaff && !isSuperManager ? user?.Subscription || null : null,
+      login, staffLogin, managerLogin, logout, refreshMe: () => refreshMe(isSuperManager),
       // Access-right flag check — owners have everything (nav.js _applyUserPermissions).
       can: (flag) => !isStaff || isTrue(user?.[flag]),
-      displayName: user?.subusername || user?.displayName || user?.Mobile || (user?.UID ? `User #${user.UID}` : 'User'),
-      roleLabel: isStaff ? `Staff · ${user?.subusername || user?.SubUID}` : isSuperAdmin ? 'Super Admin' : 'Administrator',
+      displayName: user?.Name || user?.subusername || user?.displayName || user?.Mobile || (user?.UID ? `User #${user.UID}` : 'User'),
+      roleLabel: isSuperManager ? 'Super Manager' : isStaff ? `Staff · ${user?.subusername || user?.SubUID}` : isSuperAdmin ? 'Super Admin' : 'Administrator',
     };
-  }, [user, ready, login, staffLogin, logout, refreshMe]);
+  }, [user, ready, login, staffLogin, managerLogin, logout, refreshMe]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
