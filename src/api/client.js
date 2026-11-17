@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 
 // Set EXPO_PUBLIC_API_BASE (e.g. in .env or the EAS environment) to point the
 // app at this deployment's backend; the fallback is the original production API.
-export const API_BASE = (process.env.EXPO_PUBLIC_API_BASE || 'https://marketai.solutions/sapi').replace(/\/+$/, '');
+export const API_BASE = (process.env.EXPO_PUBLIC_API_BASE || 'https://marketai.solutions/susu-dev-api').replace(/\/+$/, '');
 const TOKEN_KEY = 'yubi7_token';
 const TIMEOUT_MS = 90000;
 
